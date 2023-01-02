@@ -1,13 +1,18 @@
 package springboot.mongo.services;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.stereotype.Service;
 import springboot.mongo.collections.ResponseObj;
 import springboot.mongo.collections.Student;
 import springboot.mongo.repositories.StudentRepository;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +20,9 @@ import java.util.Optional;
 public class StudentServiceImp implements StudentService{
     @Autowired
     private StudentRepository studentRepository;
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
     @Override
     public ResponseObj getAllStudent() {
         try {
@@ -81,5 +89,46 @@ public class StudentServiceImp implements StudentService{
         } catch (Exception e) {
             return  new ResponseObj(500, e.getMessage(), "");
         }
+    }
+
+    @Override
+    public ResponseObj getStudentBetweenAge(Integer minAge, Integer maxAge) {
+        try {
+            List<Student> student = studentRepository.getStudentBetween(minAge, maxAge);
+            if (student.size() > 0) {
+                return new ResponseObj(200, "Query Sucess", student);
+            } else {
+                return new ResponseObj(500, "No exits !!!", "");
+            }
+        } catch (Exception e) {
+            return  new ResponseObj(500, e.getMessage(), "");
+        }
+
+    }
+
+    @Override
+    public Page<Student> filterStudent(String firstName, Integer minAge, Integer maxAge, String country, Pageable pageable) {
+        Query query = new Query().with(pageable);
+        List<Criteria> criteria = new ArrayList<>();
+
+        if (firstName != null && !firstName.isEmpty()) {
+            criteria.add(Criteria.where("firstName").regex(firstName, "i"));
+        }
+        if (minAge != null && maxAge != null) {
+            criteria.add(Criteria.where("age").gte(minAge).lte(maxAge));
+        }
+        if (country != null && !country.isEmpty()) {
+            criteria.add(Criteria.where("addresses.country").is(country));
+        }
+
+        if (!criteria.isEmpty()) {
+            query.addCriteria(new Criteria()
+                    .andOperator(criteria.toArray(new Criteria[0])));
+        }
+
+        Page<Student> student = PageableExecutionUtils.getPage(
+                mongoTemplate.find(query, Student.class), pageable, () -> mongoTemplate.count(query.skip(0).limit(0), Student.class));
+
+        return student;
     }
 }
